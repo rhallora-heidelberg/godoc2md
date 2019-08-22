@@ -15,6 +15,7 @@ import (
 	"flag"
 	"fmt"
 	"go/build"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -49,6 +50,8 @@ var (
 	srcLinkHashFormat = flag.String("hashformat", "#L%d", "source link URL hash format")
 
 	srcLinkFormat = flag.String("srclink", "", "if set, format for entire source link")
+
+	writeFile = flag.Bool("writefile", false, "write output as README.md in package directory")
 )
 
 func usage() {
@@ -146,6 +149,20 @@ func bitscapeFunc(text string) string {
 	return s
 }
 
+func readmeTarget() string {
+	gopath := os.Getenv("GOPATH")
+	if gopath == "" {
+		gopath = build.Default.GOPATH
+	}
+
+	pkg := ""
+	if args := flag.Args(); len(args) != 0 {
+		pkg = args[0]
+	}
+
+	return filepath.Join(gopath, "src", pkg, "README.md")
+}
+
 func main() {
 	flag.Usage = usage
 	flag.Parse()
@@ -186,7 +203,18 @@ func main() {
 		pres.PackageText = readTemplate("package.txt", pkgTemplate)
 	}
 
-	if err := godoc.CommandLine(os.Stdout, fs, pres, flag.Args()); err != nil {
+	buf := bytes.NewBufferString("")
+	if err := godoc.CommandLine(buf, fs, pres, flag.Args()); err != nil {
+		log.Print(err)
+		return
+	}
+
+	if !*writeFile {
+		io.Copy(os.Stdout, buf)
+		return
+	}
+
+	if err := ioutil.WriteFile(readmeTarget(), buf.Bytes(), 0644); err != nil {
 		log.Print(err)
 	}
 }
